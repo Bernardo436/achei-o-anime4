@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Achei o Anime</title>
+<meta name="description" content="Descreva o personagem ou envie um print e descubra de qual anime ele é e onde assistir oficialmente.">
+<meta name="theme-color" content="#0E0A14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: coluna central; aurora colorida ao fundo, busca em vidro com borda em degradê, fichas de personagem com retrato vertical.
+   As cores e fontes reais vêm de settings.js; aqui ficam os valores iniciais. */
+:root{
+  --bg:#0E0A12; --surface:#17121D; --surface-2:#211A28; --fg:#F6F2FB; --muted:#A39CB4;
+  --line:rgba(246,242,251,.10); --line-strong:rgba(246,242,251,.22);
+  --accent:#FF4F9A; --accent-2:#FFB15C; --accent-ink:#14101C; --glow:#FF4F9A88; --warn:#FFC978;
+  --display:'Shippori Mincho B1','Hiragino Mincho ProN',Georgia,serif; --display-weight:800;
+  --body:'Zen Kaku Gothic New',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'DM Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  --base-size:16px; --r:20px;
+  --grad:linear-gradient(100deg,var(--accent),var(--accent-2));
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:var(--base-size);line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden;
+  transition:background-color .4s,color .4s}
+img,video{max-width:100%;display:block}
+[hidden]{display:none!important}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+::selection{background:var(--accent);color:var(--accent-ink)}
+
+/* Fundo: aurora + partículas */
+#fx{position:fixed;inset:0;pointer-events:none;z-index:1}
+.aurora{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.aurora i{position:absolute;border-radius:50%;filter:blur(90px);opacity:.38;mix-blend-mode:screen}
+[data-mode="light"] .aurora i{opacity:.22;mix-blend-mode:multiply}
+.aurora i:nth-child(1){width:55vmax;height:55vmax;left:-15vmax;top:-20vmax;background:var(--accent);animation:drift1 26s ease-in-out infinite alternate}
+.aurora i:nth-child(2){width:45vmax;height:45vmax;right:-15vmax;top:5vmax;background:var(--accent-2);animation:drift2 32s ease-in-out infinite alternate}
+.aurora i:nth-child(3){width:40vmax;height:40vmax;left:25vw;bottom:-25vmax;background:color-mix(in srgb,var(--accent) 50%,var(--accent-2));animation:drift1 38s ease-in-out infinite alternate-reverse}
+[data-aurora="off"] .aurora i{animation:none}
+[data-theme="carmesim"] .aurora::before{content:"";position:absolute;left:50%;bottom:-30vmax;width:120vmax;height:70vmax;transform:translateX(-50%);
+  background:radial-gradient(closest-side,rgba(227,18,45,.55),rgba(120,0,12,.25) 55%,transparent);filter:blur(30px);animation:ember 5s ease-in-out infinite}
+[data-theme="carmesim"] .aurora::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.65))}
+[data-theme="carmesim"][data-mode="light"] .aurora::after{display:none}
+[data-aurora="off"] .aurora::before{animation:none}
+@keyframes ember{50%{opacity:.6;transform:translateX(-50%) scale(1.06)}}
+.flash{position:fixed;inset:0;z-index:1;pointer-events:none;background:rgba(227,18,45,.10);opacity:0;transition:opacity .35s}
+.flash.on{opacity:1;transition:none}
+@keyframes drift1{to{transform:translate(12vmax,10vmax) scale(1.15)}}
+@keyframes drift2{to{transform:translate(-10vmax,14vmax) scale(.9)}}
+
+.wrap{position:relative;z-index:2;max-width:880px;margin:0 auto;padding-block:max(56px,env(safe-area-inset-top)) 80px;
+  padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right));
+  display:flex;flex-direction:column;gap:40px}
+
+/* Botão de configurações */
+.gear{position:fixed;z-index:20;top:calc(14px + env(safe-area-inset-top,0px));right:calc(14px + env(safe-area-inset-right,0px));
+  width:46px;height:46px;border-radius:50%;border:1px solid var(--line-strong);background:color-mix(in srgb,var(--surface) 75%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:grid;place-items:center;cursor:pointer;transition:transform .3s,border-color .2s}
+.gear svg{width:22px;height:22px;stroke:var(--fg)}
+.gear:hover{transform:rotate(45deg);border-color:var(--accent)}
+
+/* Topo */
+.hero{display:flex;flex-direction:column;gap:14px}
+.eyebrow{font-family:var(--mono);font-size:.74rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);display:flex;gap:12px;align-items:center}
+.eyebrow span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:500;letter-spacing:.24em}
+h1{font-family:var(--display);font-weight:var(--display-weight);font-size:clamp(2.8rem,9vw,5.4rem);line-height:.98;margin:0;letter-spacing:-.015em;text-wrap:balance}
+h1 em{font-style:normal;background:linear-gradient(100deg,var(--accent),var(--accent-2),var(--accent));background-size:200% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
+@keyframes shine{to{background-position:-200% 0}}
+.sub{margin:0;color:var(--muted);max-width:52ch;font-size:1.08em}
+
+/* Busca */
+.search{position:relative;border-radius:calc(var(--r) + 8px);padding:24px;display:flex;flex-direction:column;gap:18px;
+  background:linear-gradient(color-mix(in srgb,var(--surface) 82%,transparent),color-mix(in srgb,var(--surface) 82%,transparent)) padding-box,
+             linear-gradient(130deg,color-mix(in srgb,var(--accent) 70%,transparent),var(--line) 40%,var(--line) 60%,color-mix(in srgb,var(--accent-2) 70%,transparent)) border-box;
+  border:1px solid transparent;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  box-shadow:0 40px 100px -50px var(--glow),0 2px 0 0 rgba(255,255,255,.03) inset}
+.field label{display:block;font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+textarea{width:100%;min-height:100px;resize:vertical;font:inherit;font-size:1.14em;line-height:1.5;color:var(--fg);background:transparent;border:0;
+  border-bottom:1px solid var(--line-strong);padding:4px 0 12px;outline:0;transition:border-color .2s}
+textarea:focus{border-bottom-color:var(--accent);box-shadow:0 1px 0 0 var(--accent)}
+textarea::placeholder{color:var(--muted);opacity:.7}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:inherit;font-size:.86em;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);padding:6px 14px;border-radius:999px;cursor:pointer;transition:all .18s}
+.chip:hover{border-color:transparent;background:var(--grad);color:var(--accent-ink);transform:translateY(-1px)}
+.chip::before{content:"+ ";opacity:.6}
+.row{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.drop{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px dashed var(--line-strong);border-radius:16px;cursor:pointer;flex:1 1 280px;min-width:0;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.drop .ico{width:40px;height:40px;border-radius:12px;background:var(--surface-2);display:grid;place-items:center;flex:none}
+.drop .ico svg{width:20px;height:20px;stroke:var(--accent)}
+.drop img{width:40px;height:40px;border-radius:12px;object-fit:cover;flex:none}
+.drop .txt{min-width:0;font-size:.9em;line-height:1.35}
+.drop .txt strong{font-weight:500;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drop .txt small{color:var(--muted)}
+.btns{display:flex;gap:10px;align-items:center}
+.go{position:relative;font:inherit;font-weight:700;font-size:1em;color:var(--accent-ink);border:0;border-radius:999px;padding:14px 28px;cursor:pointer;overflow:hidden;
+  background:linear-gradient(100deg,var(--accent),var(--accent-2),var(--accent));background-size:200% 100%;
+  box-shadow:0 12px 34px -10px var(--glow);transition:transform .15s,box-shadow .2s,background-position .6s}
+.go:hover{transform:translateY(-2px);background-position:100% 0;box-shadow:0 18px 44px -10px var(--glow)}
+.go:disabled{opacity:.7;cursor:wait;transform:none}
+.go:disabled span{animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.5}}
+.ghost{font:inherit;font-size:.9em;background:transparent;border:0;color:var(--muted);cursor:pointer;padding:8px}
+.ghost:hover{color:var(--fg)}
+.status{font-size:.92em;color:var(--muted);min-height:1.5em;margin:-6px 0 0}
+.status.err{color:var(--warn)}
+
+/* Resultados */
+.results{display:flex;flex-direction:column;gap:20px}
+.rhead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-bottom:12px;
+  border-bottom:1px solid transparent;border-image:linear-gradient(90deg,var(--accent),var(--accent-2),transparent) 1}
+.rhead h2{font-family:var(--display);font-weight:var(--display-weight);font-size:1.8em;margin:0}
+.rhead span{font-family:var(--mono);font-size:.78rem;color:var(--muted);letter-spacing:.06em}
+.notes{display:flex;flex-direction:column;gap:6px}
+.notes p{margin:0;font-size:.88em;color:var(--warn)}
+.list{display:flex;flex-direction:column;gap:20px}
+
+.card{display:grid;grid-template-columns:200px minmax(0,1fr);border-radius:var(--r);overflow:hidden;
+  background:color-mix(in srgb,var(--surface) 88%,transparent);border:1px solid var(--line);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  animation:rise .55s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i,0) * 80ms);transition:transform .25s,box-shadow .25s,border-color .25s}
+.card:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--accent) 45%,transparent);box-shadow:0 30px 70px -40px var(--glow)}
+@keyframes rise{from{opacity:.001;transform:translateY(14px)}to{opacity:1;transform:none}}
+.portrait{position:relative;min-height:266px;height:100%;background:var(--surface-2);overflow:hidden}
+.portrait img,.portrait video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .6s}
+.card:hover .portrait img{transform:scale(1.04)}
+.portrait:has(img)::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 50%,color-mix(in srgb,var(--accent) 35%,rgba(0,0,0,.5)))}
+.portrait .vert{position:absolute;right:10px;top:12px;writing-mode:vertical-rl;font-family:var(--display);font-weight:var(--display-weight);font-size:1.05rem;letter-spacing:.14em;color:var(--fg);z-index:1}
+.portrait:has(img) .vert{color:#fff;text-shadow:0 1px 10px rgba(0,0,0,.7)}
+.portrait .initial{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-weight:var(--display-weight);font-size:4.5rem;color:var(--accent-ink);
+  background:linear-gradient(150deg,var(--accent),var(--accent-2))}
+.info{padding:22px 24px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.rank{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.rank b{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:500}
+.info h3{font-family:var(--display);font-weight:var(--display-weight);font-size:1.8em;line-height:1.1;margin:0;text-wrap:balance}
+.show{display:flex;align-items:center;gap:10px;min-width:0}
+.show img{width:30px;height:42px;object-fit:cover;border-radius:6px;flex:none;border:1px solid var(--line)}
+.show a,.show span{font-weight:700;text-decoration:none;min-width:0}
+.show a:hover{color:var(--accent)}
+.show small{display:block;color:var(--muted);font-weight:400;font-size:.82em}
+.meter{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+.meter .bar{flex:1;max-width:220px;height:6px;border-radius:6px;background:var(--surface-2);overflow:hidden}
+.meter .bar i{display:block;height:100%;border-radius:6px;background:var(--grad);box-shadow:0 0 12px var(--glow)}
+.why{margin:0;opacity:.92}
+.scene{display:flex;flex-direction:column;gap:8px}
+.scene video{width:100%;max-width:380px;border-radius:14px;border:1px solid var(--line)}
+.scene p{margin:0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+.watch{border-top:1px solid var(--line);padding-top:14px;margin-top:2px;display:flex;flex-direction:column;gap:10px}
+.watch .lbl{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.plats{display:flex;flex-wrap:wrap;gap:8px}
+.plat{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-size:.88em;font-weight:500;padding:7px 15px 7px 8px;border-radius:999px;
+  background:var(--surface-2);border:1px solid var(--line);transition:all .18s}
+.plat:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 8px 20px -10px var(--glow)}
+.plat img{width:22px;height:22px;border-radius:6px}
+.plat .dot{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:.72rem;font-weight:700;color:var(--accent-ink);background:var(--grad)}
+.plat small{color:var(--muted);font-weight:400}
+.plat.alt{background:transparent;padding-left:15px}
+.empty{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px;color:var(--muted)}
+
+.skel{display:grid;grid-template-columns:200px 1fr;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.skel .p{min-height:266px}
+.skel .l{padding:22px;display:flex;flex-direction:column;gap:12px}
+.skel .p,.skel .l i{background:linear-gradient(90deg,var(--surface-2) 0%,color-mix(in srgb,var(--accent) 14%,var(--surface-2)) 50%,var(--surface-2) 100%);background-size:200% 100%;animation:sh 1.3s linear infinite}
+.skel .l i{display:block;height:14px;border-radius:6px}
+@keyframes sh{to{background-position:-200% 0}}
+
+footer{font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;display:flex;flex-direction:column;gap:4px}
+
+/* Painel de configurações */
+.scrim{position:fixed;inset:0;z-index:30;background:rgba(5,3,8,.45);opacity:0;transition:opacity .25s;backdrop-filter:blur(2px)}
+.scrim.open{opacity:1}
+.settings{position:fixed;z-index:31;top:0;right:0;bottom:0;width:min(400px,100vw);display:flex;flex-direction:column;
+  background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+  border-left:1px solid var(--line-strong);transform:translateX(105%);transition:transform .3s cubic-bezier(.2,.7,.2,1);visibility:hidden;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px)}
+.settings.open{transform:none;visibility:visible}
+.s-head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line)}
+.s-head h2{margin:0;font-family:var(--display);font-weight:var(--display-weight);font-size:1.5rem}
+.x{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:transparent;display:grid;place-items:center;cursor:pointer}
+.x svg{width:18px;height:18px;stroke:var(--fg)}
+.s-body{flex:1;overflow-y:auto;padding:8px 20px 20px;display:flex;flex-direction:column}
+.s-group{padding:18px 0;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:12px}
+.s-group:last-child{border-bottom:0}
+.s-group h3{margin:0;font-family:var(--mono);font-size:.72rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between}
+.s-group h3 output{color:var(--fg);letter-spacing:.04em}
+.sub-h{margin-top:4px!important}
+.themes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.theme,.font,.fx-opt,.seg button{font:inherit;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:14px;cursor:pointer;transition:border-color .15s,background .15s}
+.theme{display:flex;align-items:center;gap:10px;padding:8px 10px;font-size:.88rem;text-align:left}
+.theme .sw{width:28px;height:28px;border-radius:9px;flex:none;background:linear-gradient(135deg,var(--a),var(--b));box-shadow:0 4px 12px -4px var(--a)}
+.theme[data-k="custom"] .sw{background:conic-gradient(#FF4F9A,#FFB15C,#2FD47C,#4F8BFF,#A855FF,#FF4F9A)}
+[aria-pressed="true"],.seg [aria-checked="true"]{border-color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 14%,var(--surface-2))!important}
+.custom{display:flex;gap:12px}
+.custom label{flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:12px;font-size:.88rem}
+.custom input[type=color]{width:34px;height:28px;border:0;padding:0;background:none;cursor:pointer}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.seg button{padding:9px 6px;font-size:.88rem}
+.fonts{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
+.font{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px}
+.font b{font-size:1.5rem;line-height:1.2}
+.font span{font-size:.78rem;color:var(--muted)}
+.fonts.small .font b{font-size:1.2rem}
+.effects{display:flex;flex-wrap:wrap;gap:8px}
+.fx-opt{padding:8px 14px;font-size:.88rem;border-radius:999px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=range]:disabled{opacity:.4}
+.toggle{display:flex;align-items:center;gap:10px;font-size:.92rem;cursor:pointer}
+.toggle input{width:18px;height:18px;accent-color:var(--accent)}
+.s-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end}
+
+@media (max-width:560px){
+  .card,.skel{grid-template-columns:1fr}
+  .portrait{min-height:0;height:auto;aspect-ratio:4/3}
+  .skel .p{min-height:0;aspect-ratio:4/3}
+  .portrait img{object-position:center 20%}
+  .search{padding:18px}
+  .btns{width:100%;justify-content:space-between}
+  .settings{top:auto;width:100vw;max-height:86vh;border-left:0;border-top:1px solid var(--line-strong);border-radius:24px 24px 0 0;transform:translateY(105%);padding-left:env(safe-area-inset-left,0px)}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+<!-- Aplica o tema salvo antes de desenhar a página, sem piscar -->
+<script>
+// Configurações do visitante: tema de cores, modo claro/escuro, fontes, tamanho e efeitos.
+// Ficam salvas só no navegador de quem usa (localStorage).
+(function () {
+  const KEY = "achei-o-anime:config";
+
+  const THEMES = {
+    sakura:   { name: "Sakura",       a: "#FF4F9A", b: "#FFB15C", effect: "sakura" },
+    neon:     { name: "Neon Tóquio",  a: "#00E0FF", b: "#FF2BD6", effect: "estrelas" },
+    jujutsu:  { name: "Energia azul", a: "#4F8BFF", b: "#A855FF", effect: "faiscas" },
+    sunset:   { name: "Pôr do sol",   a: "#FF7A1A", b: "#FF2E63", effect: "vagalumes" },
+    ghibli:   { name: "Floresta",     a: "#2FD47C", b: "#F5CE3A", effect: "vagalumes" },
+    gelo:     { name: "Inverno",      a: "#7FD8FF", b: "#C6B8FF", effect: "neve" },
+    carmesim: { name: "Corte Carmesim", a: "#E3122D", b: "#FF6A2B", effect: "cortes", deep: true },
+    custom:   { name: "Minhas cores", a: "#FF4F9A", b: "#4F8BFF", effect: null },
+  };
+
+  const TITLE_FONTS = {
+    mincho: { name: "Elegante", family: "'Shippori Mincho B1'", css: "Shippori+Mincho+B1:wght@700;800", weight: 800 },
+    manga:  { name: "Mangá",    family: "'Dela Gothic One'",    css: "Dela+Gothic+One",               weight: 400 },
+    fofa:   { name: "Fofa",     family: "'Mochiy Pop One'",     css: "Mochiy+Pop+One",                weight: 400 },
+    pincel: { name: "Pincel",   family: "'Yuji Syuku'",         css: "Yuji+Syuku",                    weight: 400 },
+    moderna:{ name: "Moderna",  family: "'Zen Kaku Gothic New'", css: null,                           weight: 700 },
+  };
+  const BODY_FONTS = {
+    zen:     { name: "Clássica",    family: "'Zen Kaku Gothic New'", css: null },
+    redonda: { name: "Arredondada", family: "'M PLUS Rounded 1c'",   css: "M+PLUS+Rounded+1c:wght@400;500;700" },
+    sistema: { name: "Do aparelho", family: "system-ui",             css: null },
+  };
+  const EFFECTS = {
+    nenhum:    "Nenhum",
+    sakura:    "Pétalas de sakura",
+    neve:      "Neve",
+    estrelas:  "Estrelas",
+    vagalumes: "Vaga-lumes",
+    faiscas:   "Faíscas",
+    cortes:    "Cortes",
+  };
+
+  const DEFAULTS = { theme: "sakura", c1: "#FF4F9A", c2: "#4F8BFF", mode: "dark", title: "mincho", body: "zen", size: 16, effect: "sakura", amount: 50, aurora: true };
+
+  function load() {
+    try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; } catch { return { ...DEFAULTS }; }
+  }
+  function save(cfg) { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} }
+
+  // Texto escuro ou claro em cima da cor, pelo contraste.
+  function inkFor(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.35 ? "#14101C" : "#FFFFFF";
+  }
+  function mix(hex, base, p) {
+    const h = (x) => [1, 3, 5].map((i) => parseInt(x.slice(i, i + 2), 16));
+    const [a, b] = [h(hex), h(base)];
+    return "#" + a.map((v, i) => Math.round(v * p + b[i] * (1 - p)).toString(16).padStart(2, "0")).join("");
+  }
+
+  const loaded = new Set();
+  function loadFont(css) {
+    if (!css || loaded.has(css)) return;
+    loaded.add(css);
+    const l = document.createElement("link");
+    l.rel = "stylesheet";
+    l.href = `https://fonts.googleapis.com/css2?family=${css}&display=swap`;
+    document.head.appendChild(l);
+  }
+
+  function isDark(cfg) {
+    if (cfg.mode === "auto") return !window.matchMedia || matchMedia("(prefers-color-scheme: dark)").matches;
+    return cfg.mode !== "light";
+  }
+
+  function apply(cfg) {
+    const t = THEMES[cfg.theme] || THEMES.sakura;
+    const a = cfg.theme === "custom" ? cfg.c1 : t.a;
+    const b = cfg.theme === "custom" ? cfg.c2 : t.b;
+    const dark = isDark(cfg);
+    const base = dark ? "#0B0910" : "#FFFFFF";
+    const r = document.documentElement.style;
+    const set = (k, v) => r.setProperty(k, v);
+
+    set("--accent", a);
+    set("--accent-2", b);
+    set("--accent-ink", inkFor(mix(a, b, 0.5)));
+    set("--bg", dark ? (t.deep && cfg.theme !== "custom" ? "#070304" : mix(a, "#08070C", 0.05)) : mix(a, "#FFFFFF", 0.035));
+    document.documentElement.dataset.theme = cfg.theme;
+    set("--surface", dark ? mix(a, "#14111B", 0.06) : "#FFFFFF");
+    set("--surface-2", dark ? mix(a, "#1D1926", 0.08) : mix(a, "#F6F3F8", 0.06));
+    set("--fg", dark ? "#F6F2FB" : "#17121F");
+    set("--muted", dark ? "#A39CB4" : "#665E78");
+    set("--line", dark ? "rgba(246,242,251,.10)" : "rgba(23,18,31,.09)");
+    set("--line-strong", dark ? "rgba(246,242,251,.22)" : "rgba(23,18,31,.20)");
+    set("--glow", mix(a, base, dark ? 0.45 : 0.35) + "88");
+    set("--warn", dark ? "#FFC978" : "#A35F00");
+    document.documentElement.style.colorScheme = dark ? "dark" : "light";
+    document.documentElement.dataset.mode = dark ? "dark" : "light";
+
+    const tf = TITLE_FONTS[cfg.title] || TITLE_FONTS.mincho;
+    const bf = BODY_FONTS[cfg.body] || BODY_FONTS.zen;
+    loadFont(tf.css); loadFont(bf.css);
+    set("--display", `${tf.family}, 'Hiragino Mincho ProN', Georgia, serif`);
+    set("--display-weight", String(tf.weight));
+    set("--body", `${bf.family}, system-ui, -apple-system, 'Segoe UI', sans-serif`);
+    set("--base-size", `${cfg.size}px`);
+    document.documentElement.dataset.aurora = cfg.aurora ? "on" : "off";
+
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = dark ? "#0E0A14" : "#FFFFFF";
+
+    window.dispatchEvent(new CustomEvent("config", { detail: cfg }));
+  }
+
+  let cfg = load();
+  apply(cfg);
+
+  window.Config = {
+    get: () => cfg,
+    effectsList: EFFECTS,
+    set(patch) { cfg = { ...cfg, ...patch }; save(cfg); apply(cfg); render(); },
+    reset() { cfg = { ...DEFAULTS }; save(cfg); apply(cfg); render(); },
+  };
+
+  // Painel ----------------------------------------------------------
+  let render = () => {};
+  document.addEventListener("DOMContentLoaded", () => {
+    const $ = (id) => document.getElementById(id);
+    const panel = $("settings"), scrim = $("scrim"), openBtn = $("openSettings");
+
+    function open() {
+      scrim.hidden = false;
+      requestAnimationFrame(() => { panel.classList.add("open"); scrim.classList.add("open"); });
+      panel.setAttribute("aria-hidden", "false"); openBtn.setAttribute("aria-expanded", "true");
+      setTimeout(() => $("closeSettings").focus(), 50);
+    }
+    function close() {
+      panel.classList.remove("open"); scrim.classList.remove("open");
+      panel.setAttribute("aria-hidden", "true"); openBtn.setAttribute("aria-expanded", "false");
+      setTimeout(() => { scrim.hidden = true; }, 250);
+      openBtn.focus();
+    }
+    openBtn.onclick = open;
+    $("closeSettings").onclick = close;
+    scrim.onclick = close;
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && panel.classList.contains("open")) close(); });
+
+    // Temas
+    $("themes").innerHTML = Object.entries(THEMES).map(([k, t]) => `
+      <button type="button" class="theme" data-k="${k}" aria-pressed="false">
+        <span class="sw" style="--a:${t.a};--b:${t.b}"></span><span>${t.name}</span>
+      </button>`).join("");
+    $("themes").onclick = (e) => {
+      const btn = e.target.closest(".theme"); if (!btn) return;
+      const k = btn.dataset.k, t = THEMES[k];
+      const patch = { theme: k };
+      if (t.effect && cfg.effect !== "nenhum") patch.effect = t.effect; // cada tema sugere seu efeito
+      Config.set(patch);
+    };
+    $("c1").oninput = (e) => Config.set({ c1: e.target.value });
+    $("c2").oninput = (e) => Config.set({ c2: e.target.value });
+
+    // Modo
+    $("mode").onclick = (e) => { const b = e.target.closest("button"); if (b) Config.set({ mode: b.dataset.v }); };
+    if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (cfg.mode === "auto") apply(cfg); });
+
+    // Fontes (a amostra de cada opção aparece na própria fonte)
+    const fontBtn = (k, f, sample) => `<button type="button" class="font" data-k="${k}" aria-pressed="false"><b style="font-family:${f.family};font-weight:${f.weight || 500}">${sample}</b><span>${f.name}</span></button>`;
+    Object.values(TITLE_FONTS).forEach((f) => loadFont(f.css));
+    $("titleFonts").innerHTML = Object.entries(TITLE_FONTS).map(([k, f]) => fontBtn(k, f, "Aa あ")).join("");
+    $("bodyFonts").innerHTML = Object.entries(BODY_FONTS).map(([k, f]) => fontBtn(k, f, "Aa")).join("");
+    $("titleFonts").onclick = (e) => { const b = e.target.closest(".font"); if (b) Config.set({ title: b.dataset.k }); };
+    $("bodyFonts").onclick = (e) => { const b = e.target.closest(".font"); if (b) { loadFont(BODY_FONTS[b.dataset.k].css); Config.set({ body: b.dataset.k }); } };
+
+    $("size").oninput = (e) => Config.set({ size: Number(e.target.value) });
+
+    // Efeitos
+    $("effects").innerHTML = Object.entries(EFFECTS).map(([k, n]) => `<button type="button" class="fx-opt" data-k="${k}" aria-pressed="false">${n}</button>`).join("");
+    $("effects").onclick = (e) => { const b = e.target.closest(".fx-opt"); if (b) Config.set({ effect: b.dataset.k }); };
+    $("amount").oninput = (e) => Config.set({ amount: Number(e.target.value) });
+    $("aurora").onchange = (e) => Config.set({ aurora: e.target.checked });
+    $("reset").onclick = () => Config.reset();
+
+    render = () => {
+      document.querySelectorAll(".theme").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.k === cfg.theme)));
+      $("customColors").hidden = cfg.theme !== "custom";
+      $("c1").value = cfg.c1; $("c2").value = cfg.c2;
+      document.querySelectorAll("#mode button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.v === cfg.mode)));
+      document.querySelectorAll("#titleFonts .font").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.k === cfg.title)));
+      document.querySelectorAll("#bodyFonts .font").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.k === cfg.body)));
+      $("size").value = cfg.size; $("sizeOut").textContent = `${cfg.size}px`;
+      document.querySelectorAll(".fx-opt").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.k === cfg.effect)));
+      $("amount").value = cfg.amount; $("amountOut").textContent = `${cfg.amount}%`;
+      $("amount").disabled = cfg.effect === "nenhum";
+      $("aurora").checked = cfg.aurora;
+    };
+    render();
+  });
+})();
+</script>
+</head>
+<body>
+<canvas id="fx" aria-hidden="true"></canvas>
+<div class="flash" id="flash" aria-hidden="true"></div>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<button class="gear" id="openSettings" type="button" aria-label="Abrir configurações" aria-controls="settings" aria-expanded="false">
+  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+</button>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow"><span>アニメ探し</span>busca por personagem</div>
+    <h1>Achei o <em>Anime</em></h1>
+    <p class="sub">Descreva o personagem do jeito que lembrar, ou mande um print da cena. A gente descobre quem é, de qual anime, e onde assistir oficialmente.</p>
+  </header>
+
+  <form class="search" id="form" novalidate>
+    <div class="field">
+      <label for="desc">Como ele é?</label>
+      <textarea id="desc" placeholder="cabelo branco, olhos azuis brilhantes, usa uma venda preta nos olhos e roupa escura de escola"></textarea>
+    </div>
+    <div class="chips" id="chips" aria-label="Adicionar características">
+      <button type="button" class="chip">cabelo branco</button>
+      <button type="button" class="chip">venda nos olhos</button>
+      <button type="button" class="chip">cicatriz no rosto</button>
+      <button type="button" class="chip">olhos vermelhos</button>
+      <button type="button" class="chip">chapéu de palha</button>
+      <button type="button" class="chip">óculos</button>
+      <button type="button" class="chip">máscara</button>
+    </div>
+    <div class="row">
+      <label class="drop" id="drop">
+        <input type="file" id="img" accept="image/jpeg,image/png,image/webp">
+        <span class="ico" id="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg></span>
+        <img id="thumb" alt="" hidden>
+        <span class="txt"><strong id="dropText">Enviar print da cena</strong><small>Opcional · acha até o episódio e o minuto</small></span>
+      </label>
+      <div class="btns">
+        <button class="ghost" id="clear" type="button">Limpar</button>
+        <button class="go" id="go" type="submit"><span>Encontrar anime</span></button>
+      </div>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </form>
+
+  <section class="results" id="out" hidden>
+    <div class="rhead"><h2 id="rtitle">Resultados</h2><span id="rtag"></span></div>
+    <div class="notes" id="notes"></div>
+    <div class="list" id="list"></div>
+  </section>
+
+  <footer>
+    <span>Só mostramos plataformas oficiais. Disponibilidade no Brasil pelo <a href="https://www.justwatch.com/br" target="_blank" rel="noopener">JustWatch</a>.</span>
+    <span>Personagens e capas: <a href="https://anilist.co" target="_blank" rel="noopener">AniList</a> · Busca por cena: <a href="https://trace.moe" target="_blank" rel="noopener">trace.moe</a></span>
+  </footer>
+</div>
+
+<!-- Configurações -->
+<div class="scrim" id="scrim" hidden></div>
+<aside class="settings" id="settings" aria-label="Configurações" aria-hidden="true">
+  <div class="s-head">
+    <h2>Configurações</h2>
+    <button class="x" id="closeSettings" type="button" aria-label="Fechar configurações">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+
+  <div class="s-body">
+    <section class="s-group">
+      <h3>Tema de cores</h3>
+      <div class="themes" id="themes"></div>
+      <div class="custom" id="customColors" hidden>
+        <label>Cor 1 <input type="color" id="c1"></label>
+        <label>Cor 2 <input type="color" id="c2"></label>
+      </div>
+    </section>
+
+    <section class="s-group">
+      <h3>Modo</h3>
+      <div class="seg" id="mode" role="radiogroup" aria-label="Modo">
+        <button type="button" data-v="dark" role="radio">Escuro</button>
+        <button type="button" data-v="light" role="radio">Claro</button>
+        <button type="button" data-v="auto" role="radio">Automático</button>
+      </div>
+    </section>
+
+    <section class="s-group">
+      <h3>Fonte dos títulos</h3>
+      <div class="fonts" id="titleFonts"></div>
+    </section>
+
+    <section class="s-group">
+      <h3>Fonte do texto</h3>
+      <div class="fonts small" id="bodyFonts"></div>
+    </section>
+
+    <section class="s-group">
+      <h3>Tamanho do texto <output id="sizeOut"></output></h3>
+      <input type="range" id="size" min="14" max="20" step="1">
+    </section>
+
+    <section class="s-group">
+      <h3>Efeitos</h3>
+      <div class="effects" id="effects"></div>
+      <h3 class="sub-h">Quantidade <output id="amountOut"></output></h3>
+      <input type="range" id="amount" min="10" max="100" step="5">
+      <label class="toggle"><input type="checkbox" id="aurora"> <span>Fundo animado</span></label>
+    </section>
+  </div>
+
+  <div class="s-foot">
+    <button type="button" class="ghost" id="reset">Restaurar padrão</button>
+  </div>
+</aside>
+
+<script>
+// Efeitos de fundo desenhados num canvas: pétalas de sakura, neve, estrelas, vaga-lumes e faíscas.
+(function () {
+  const canvas = document.getElementById("fx");
+  const ctx = canvas.getContext("2d");
+  const reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let W = 0, H = 0, dpr = 1, parts = [], kind = "nenhum", raf = 0, last = 0;
+  let colors = { a: "#FF4F9A", b: "#FFB15C" };
+
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function count(amount) {
+    const area = Math.min(1.4, (W * H) / (1440 * 900));
+    const max = { sakura: 70, neve: 140, estrelas: 160, vagalumes: 45, faiscas: 90, cortes: 6 }[kind] || 0;
+    return Math.round(max * (amount / 100) * Math.max(0.35, area));
+  }
+
+  function spawn(initial) {
+    const p = { x: rnd(0, W), y: initial ? rnd(0, H) : -20, t: rnd(0, Math.PI * 2) };
+    switch (kind) {
+      case "sakura":
+        Object.assign(p, { s: rnd(7, 15), vy: rnd(0.35, 0.9), vx: rnd(0.2, 0.7), rot: rnd(0, 6.28), vr: rnd(-0.02, 0.02), flip: rnd(0.01, 0.04), sway: rnd(0.6, 1.6), hue: rnd(-8, 8) });
+        break;
+      case "neve":
+        Object.assign(p, { s: rnd(1, 3.6), vy: rnd(0.3, 1.1), vx: rnd(-0.2, 0.2), o: rnd(0.4, 0.95) });
+        break;
+      case "estrelas":
+        Object.assign(p, { y: rnd(0, H), s: rnd(0.5, 1.8), tw: rnd(0.01, 0.04), c: Math.random() < 0.2 ? "b" : Math.random() < 0.3 ? "a" : "w" });
+        break;
+      case "vagalumes":
+        Object.assign(p, { y: initial ? rnd(0, H) : H + 10, s: rnd(1.5, 3.2), vx: rnd(-0.3, 0.3), vy: rnd(-0.35, -0.08), tw: rnd(0.01, 0.03), c: Math.random() < 0.5 ? "a" : "b" });
+        break;
+      case "cortes": {
+        const ang = rnd(-0.9, 0.9) + (Math.random() < 0.5 ? 0 : Math.PI / 2);
+        const len = rnd(0.35, 0.9) * Math.hypot(W, H);
+        Object.assign(p, { x: rnd(W * 0.1, W * 0.9), y: rnd(H * 0.1, H * 0.9), ang, len, life: 0, delay: initial ? rnd(0, 240) : rnd(40, 260),
+          lines: Math.random() < 0.35 ? 3 : Math.random() < 0.5 ? 2 : 1, gap: rnd(10, 22) });
+        break;
+      }
+      case "faiscas":
+        Object.assign(p, { y: initial ? rnd(0, H) : H + 10, s: rnd(0.8, 2.2), vx: rnd(-0.4, 0.4), vy: rnd(-2.2, -0.8), life: rnd(0.4, 1), c: Math.random() < 0.5 ? "a" : "b" });
+        break;
+    }
+    return p;
+  }
+
+  let shooting = null;
+
+  function petal(p) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.scale(Math.cos(p.t) * 0.9 + 0.1, 1);
+    const s = p.s;
+    const g = ctx.createLinearGradient(0, -s, 0, s);
+    g.addColorStop(0, `hsl(${340 + p.hue} 100% 92%)`);
+    g.addColorStop(1, `hsl(${335 + p.hue} 90% 74%)`);
+    ctx.fillStyle = g;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(0, s);
+    ctx.bezierCurveTo(s * 0.9, s * 0.4, s * 0.7, -s * 0.8, s * 0.12, -s);
+    ctx.lineTo(0, -s * 0.72); // o "corte" da pétala de sakura
+    ctx.lineTo(-s * 0.12, -s);
+    ctx.bezierCurveTo(-s * 0.7, -s * 0.8, -s * 0.9, s * 0.4, 0, s);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function glow(x, y, r, color, alpha) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
+    g.addColorStop(0, color);
+    g.addColorStop(1, "transparent");
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r * 4, 0, 6.283); ctx.fill();
+  }
+
+  function frame(now) {
+    const dt = Math.min(3, (now - last) / 16.67 || 1);
+    last = now;
+    ctx.clearRect(0, 0, W, H);
+    const dark = document.documentElement.dataset.mode !== "light";
+
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      p.t += 0.02 * dt;
+      switch (kind) {
+        case "sakura":
+          p.x += (p.vx + Math.sin(p.t * p.sway) * 0.6) * dt; p.y += p.vy * dt;
+          p.rot += p.vr * dt; p.t += p.flip * dt;
+          petal(p);
+          if (p.y > H + 20 || p.x > W + 30) parts[i] = spawn(false), parts[i].x = rnd(-W * 0.3, W);
+          break;
+        case "neve":
+          p.x += (p.vx + Math.sin(p.t) * 0.3) * dt; p.y += p.vy * dt;
+          ctx.globalAlpha = dark ? p.o : p.o * 0.8;
+          ctx.fillStyle = dark ? "#FFFFFF" : "#B8C6DA";
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, 6.283); ctx.fill();
+          if (p.y > H + 5) parts[i] = spawn(false);
+          break;
+        case "estrelas": {
+          const a = 0.35 + 0.65 * Math.abs(Math.sin(p.t * p.tw * 50));
+          const c = p.c === "a" ? colors.a : p.c === "b" ? colors.b : dark ? "#FFFFFF" : "#8C84A0";
+          ctx.globalAlpha = a; ctx.fillStyle = c;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, 6.283); ctx.fill();
+          if (p.s > 1.4) glow(p.x, p.y, p.s, c, a * 0.25);
+          break;
+        }
+        case "vagalumes": {
+          p.x += (p.vx + Math.sin(p.t) * 0.4) * dt; p.y += (p.vy + Math.cos(p.t * 0.7) * 0.2) * dt;
+          const a = 0.4 + 0.6 * Math.abs(Math.sin(p.t * p.tw * 40));
+          const c = p.c === "a" ? colors.a : colors.b;
+          glow(p.x, p.y, p.s, c, a * 0.6);
+          ctx.globalAlpha = a; ctx.fillStyle = "#FFFBEA";
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.s * 0.6, 0, 6.283); ctx.fill();
+          if (p.y < -20 || p.x < -20 || p.x > W + 20) parts[i] = spawn(false);
+          break;
+        }
+        case "cortes": {
+          if (p.delay > 0) { p.delay -= dt; break; }
+          if (p.life === 0 && document.getElementById("flash")) { const f = document.getElementById("flash"); f.classList.add("on"); requestAnimationFrame(() => f.classList.remove("on")); }
+          p.life += 0.035 * dt;
+          const grow = Math.min(1, p.life * 4);          // o corte "risca" a tela rápido
+          const fade = p.life < 0.25 ? 1 : Math.max(0, 1 - (p.life - 0.25) / 0.75);
+          const dx = Math.cos(p.ang), dy = Math.sin(p.ang), nx = -dy, ny = dx;
+          for (let k = 0; k < p.lines; k++) {
+            const off = (k - (p.lines - 1) / 2) * p.gap;
+            const cx = p.x + nx * off, cy = p.y + ny * off;
+            const h = (p.len / 2) * grow;
+            const x1 = cx - dx * h, y1 = cy - dy * h, x2 = cx + dx * h, y2 = cy + dy * h;
+            const g = ctx.createLinearGradient(x1, y1, x2, y2);
+            g.addColorStop(0, "transparent"); g.addColorStop(0.5, colors.a); g.addColorStop(1, "transparent");
+            ctx.globalAlpha = fade * 0.55; ctx.strokeStyle = g; ctx.lineWidth = 7; ctx.lineCap = "round";
+            ctx.shadowColor = colors.a; ctx.shadowBlur = 18;
+            ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+            const g2 = ctx.createLinearGradient(x1, y1, x2, y2);
+            g2.addColorStop(0, "transparent"); g2.addColorStop(0.5, dark ? "#FFF4F0" : "#2A0005"); g2.addColorStop(1, "transparent");
+            ctx.globalAlpha = fade; ctx.strokeStyle = g2; ctx.lineWidth = 1.6; ctx.shadowBlur = 0;
+            ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+          }
+          if (p.life >= 1) parts[i] = spawn(false);
+          break;
+        }
+        case "faiscas": {
+          p.x += (p.vx + Math.sin(p.t * 3) * 0.3) * dt; p.y += p.vy * dt; p.life -= 0.004 * dt;
+          const c = p.c === "a" ? colors.a : colors.b;
+          glow(p.x, p.y, p.s, c, Math.max(0, p.life) * 0.5);
+          ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = c;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.s * 0.7, 0, 6.283); ctx.fill();
+          if (p.life <= 0 || p.y < -10) parts[i] = spawn(false);
+          break;
+        }
+      }
+    }
+
+    // Estrela cadente de vez em quando
+    if (kind === "estrelas") {
+      if (!shooting && Math.random() < 0.003 * dt) shooting = { x: rnd(W * 0.2, W), y: rnd(0, H * 0.4), l: 1 };
+      if (shooting) {
+        const s = shooting; s.x -= 9 * dt; s.y += 4 * dt; s.l -= 0.02 * dt;
+        const g = ctx.createLinearGradient(s.x, s.y, s.x + 90, s.y - 40);
+        g.addColorStop(0, dark ? "#FFFFFF" : colors.a); g.addColorStop(1, "transparent");
+        ctx.globalAlpha = Math.max(0, s.l); ctx.strokeStyle = g; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x + 90, s.y - 40); ctx.stroke();
+        if (s.l <= 0) shooting = null;
+      }
+    }
+    ctx.globalAlpha = 1;
+    if (!reduced) raf = requestAnimationFrame(frame);
+  }
+
+  function start(cfg) {
+    cancelAnimationFrame(raf);
+    kind = cfg.effect || "nenhum";
+    const st = getComputedStyle(document.documentElement);
+    colors = { a: st.getPropertyValue("--accent").trim() || colors.a, b: st.getPropertyValue("--accent-2").trim() || colors.b };
+    if (kind === "nenhum") { parts = []; ctx.clearRect(0, 0, W, H); canvas.hidden = true; return; }
+    canvas.hidden = false;
+    const n = count(cfg.amount ?? 50);
+    parts = Array.from({ length: n }, () => spawn(true));
+    last = performance.now();
+    raf = requestAnimationFrame(frame);
+  }
+
+  resize();
+  let rt;
+  addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { resize(); start(window.Config.get()); }, 150); });
+  addEventListener("config", (e) => start(e.detail));
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else if (kind !== "nenhum") { last = performance.now(); raf = requestAnimationFrame(frame); }
+  });
+  start(window.Config.get());
+})();
+</script>
+<script>
+// Busca: descrição e/ou print -> /api/search -> fichas de resultado.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let imageFile = null;
+
+$("chips").addEventListener("click", (e) => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  const t = $("desc");
+  t.value = (t.value.trim() ? t.value.trim().replace(/[,.]$/, "") + ", " : "") + b.textContent;
+  t.focus();
+});
+
+function setImage(file) {
+  if (!file || !/^image\//.test(file.type)) return;
+  imageFile = file;
+  const t = $("thumb"); t.src = URL.createObjectURL(file); t.hidden = false; $("ico").hidden = true;
+  $("dropText").textContent = file.name || "Print colado";
+}
+$("img").addEventListener("change", (e) => setImage(e.target.files[0]));
+const drop = $("drop");
+["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => setImage(e.dataTransfer.files[0]));
+document.addEventListener("paste", (e) => {
+  const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith("image/"));
+  if (f) setImage(f);
+});
+$("desc").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("form").requestSubmit(); });
+
+$("clear").onclick = () => {
+  $("desc").value = ""; imageFile = null; $("img").value = "";
+  $("thumb").hidden = true; $("ico").hidden = false; $("dropText").textContent = "Enviar print da cena";
+  $("out").hidden = true; setStatus(""); $("desc").focus();
+};
+
+function setStatus(msg, err) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", Boolean(err)); }
+
+// Reduz o print antes de enviar (até 1280px, JPEG).
+async function shrink(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.85));
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+  return { base64: btoa(bin), mediaType: "image/jpeg" };
+}
+
+function platformLinks(r) {
+  const q = encodeURIComponent(r.anime.romaji || r.anime.title || "");
+  const tm = r.watch?.tmdb;
+  const out = [];
+  if (tm?.providers?.length) {
+    for (const p of tm.providers) out.push(`<a class="plat" href="${esc(tm.link)}" target="_blank" rel="noopener">${p.logo ? `<img src="${esc(p.logo)}" alt="" loading="lazy">` : `<span class="dot">${esc(p.name[0])}</span>`}${esc(p.name)} <small>${esc(p.kind)}</small></a>`);
+  } else {
+    for (const l of r.watch?.official || []) out.push(`<a class="plat" href="${esc(l.url)}" target="_blank" rel="noopener"><span class="dot">${esc(l.name[0])}</span>${esc(l.name)}</a>`);
+  }
+  out.push(`<a class="plat alt" href="https://www.justwatch.com/br/busca?q=${q}" target="_blank" rel="noopener">Ver todas no JustWatch →</a>`);
+  return `<div class="plats">${out.join("")}</div>`;
+}
+
+function card(r, i) {
+  const c = r.character, a = r.anime;
+  const img = c?.image || (!c ? a.cover : null);
+  const el = document.createElement("article");
+  el.className = "card";
+  el.style.setProperty("--i", i);
+  const portrait = r.scene?.video && !c
+    ? `<video src="${esc(r.scene.video)}" autoplay muted loop playsinline></video>`
+    : img ? `<img src="${esc(img)}" alt="${esc(c?.name || a.title)}" loading="lazy">`
+    : `<div class="initial">${esc((c?.name || a.title || "?").trim().charAt(0).toUpperCase())}</div>`;
+  const show = a.url
+    ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}${a.native ? `<small>${esc(a.native)}</small>` : ""}</a>`
+    : `<span>${esc(a.title)}</span>`;
+  const pct = Number(r.confidence) || 0;
+  el.innerHTML = `
+    <div class="portrait">${portrait}${c?.native ? `<span class="vert">${esc(c.native)}</span>` : ""}</div>
+    <div class="info">
+      <div class="rank">${r.source === "print" ? "<b>Pelo print</b>" : `Palpite <b>${String(i + 1).padStart(2, "0")}</b>`}</div>
+      <h3>${esc(c?.name || a.title)}</h3>
+      ${c ? `<div class="show">${a.cover ? `<img src="${esc(a.cover)}" alt="" loading="lazy">` : ""}${show}</div>` : ""}
+      <div class="meter"><span class="bar"><i style="width:${pct}%"></i></span><span>${pct}% ${r.source === "print" ? "de semelhança" : "de chance"}</span></div>
+      ${r.why ? `<p class="why">${esc(r.why)}</p>` : ""}
+      ${r.scene ? `<div class="scene">${r.scene.video && c ? `<video src="${esc(r.scene.video)}" autoplay muted loop playsinline></video>` : ""}<p>${r.scene.episode ? `Episódio ${esc(r.scene.episode)} · ` : ""}aos ${esc(r.scene.time)}</p></div>` : ""}
+      <div class="watch"><span class="lbl">Onde assistir</span>${platformLinks(r)}</div>
+    </div>`;
+  return el;
+}
+
+function render(data) {
+  const list = $("list");
+  list.innerHTML = "";
+  $("notes").innerHTML = (data.notes || []).map((n) => `<p>${esc(n)}</p>`).join("");
+  const items = data.results || [];
+  $("rtitle").textContent = items.length ? "Encontramos" : "Nada encontrado";
+  $("rtag").textContent = items.length ? `${items.length} ${items.length === 1 ? "resultado" : "resultados"}` : "";
+  if (!items.length) list.innerHTML = `<div class="empty">Não achei ninguém com essas características. Tente acrescentar cor do cabelo e dos olhos, roupa, ou algo que o personagem sempre carrega.</div>`;
+  items.forEach((r, i) => list.appendChild(card(r, i)));
+}
+
+function loading() {
+  $("out").hidden = false; $("notes").innerHTML = ""; $("rtitle").textContent = "Procurando"; $("rtag").textContent = "";
+  $("list").innerHTML = Array.from({ length: 2 }, () => `<div class="skel"><div class="p"></div><div class="l"><i style="width:30%"></i><i style="width:60%;height:24px"></i><i style="width:45%"></i><i style="width:90%"></i><i style="width:75%"></i></div></div>`).join("");
+}
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const description = $("desc").value.trim();
+  if (!description && !imageFile) { setStatus("Escreva como é o personagem ou envie um print.", true); $("desc").focus(); return; }
+  if (location.protocol === "file:") { setStatus("A busca só funciona com o site publicado no Vercel. Abrindo o arquivo direto ela não acha o servidor.", true); return; }
+  const go = $("go"); go.disabled = true; go.firstElementChild.textContent = "Procurando...";
+  setStatus(""); loading();
+  try {
+    const payload = { description };
+    if (imageFile) payload.image = await shrink(imageFile);
+    const r = await fetch("/api/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || (r.status === 404
+      ? "O servidor da busca não foi encontrado (erro 404). A pasta api não chegou no Vercel."
+      : `A busca falhou (erro ${r.status}). Tente de novo.`));
+    render(data);
+    $("out").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  } catch (err) {
+    $("out").hidden = true;
+    setStatus(err instanceof TypeError ? "Não consegui falar com o servidor da busca. Confira se o site foi publicado no Vercel com a pasta api junto." : err.message, true);
+  } finally { go.disabled = false; go.firstElementChild.textContent = "Encontrar anime"; }
+});
+</script>
+</body>
+</html>
